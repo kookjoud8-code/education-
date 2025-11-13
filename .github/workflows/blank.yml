@@ -1,0 +1,296 @@
+import React, { Suspense, useState, useRef, useEffect } from "react";
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, useGLTF, Environment, ContactShadows, Text } from '@react-three/drei';
+import * as THREE from 'three';
+
+// ==================== شادرات الهولوغرام ====================
+const VERTEX_SHADER = `
+  varying vec2 vUv;
+  uniform float time;
+  void main() {
+    vUv = uv;
+    vec3 pos = position;
+    pos.y += sin(pos.x * 10.0 + time * 5.0) * 0.02;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+const FRAGMENT_SHADER = `
+  varying vec2 vUv;
+  uniform float time;
+  void main() {
+    float glow = abs(sin(vUv.y * 10.0 + time * 4.0));
+    vec3 color = vec3(0.1, 0.8, 1.0) * (0.4 + glow * 0.8);
+    gl_FragColor = vec4(color, 0.7);
+  }
+`;
+
+function HoloMaterial() {
+  const ref = useRef();
+  useFrame(({ clock }) => {
+    if (ref.current) ref.current.uniforms.time.value = clock.getElapsedTime();
+  });
+  return (
+    <shaderMaterial
+      ref={ref}
+      transparent
+      depthWrite={false}
+      blending={THREE.AdditiveBlending}
+      uniforms={{ time: { value: 0 } }}
+      vertexShader={VERTEX_SHADER}
+      fragmentShader={FRAGMENT_SHADER}
+    />
+  );
+}
+
+function ShadowMaterial({ intensity = 0 }) {
+  return <meshStandardMaterial color="#000" transparent opacity={0.3 + intensity * 0.6} />;
+}
+
+// ==================== نموذج الحرف ====================
+function LetterModel({ url, mouseRef, audioLevel, letter }) {
+  const { scene } = useGLTF(url);
+  const groupRef = useRef();
+
+  useFrame(() => {
+    if (groupRef.current && mouseRef.current) {
+      groupRef.current.rotation.y = mouseRef.current.x * 0.5;
+      groupRef.current.rotation.x = mouseRef.current.y * 0.2;
+    }
+  });
+
+  return (
+    <group ref={groupRef} scale={0.9 + audioLevel * 0.4}>
+      <primitive object={scene} />
+      <mesh geometry={scene.children[0]?.geometry} position={[0, 0, -0.05]} rotation={[Math.PI, 0, 0]} scale={[1, -1, 1]}>
+        <HoloMaterial />
+      </mesh>
+      <mesh geometry={scene.children[0]?.geometry} position={[0, 0, -0.1]} rotation={[Math.PI, 0, 0]} scale={[1, -1, 1]}>
+        <ShadowMaterial intensity={audioLevel} />
+      </mesh>
+      {/* نص الحرف فوق الهولوغرام */}
+      <Text position={[0, 2.2, 0]} fontSize={0.6} color="#fff" anchorX="center">
+        {letter}
+      </Text>
+    </group>
+  );
+}
+
+// ==================== قاعدة البيانات المدمجة (لا حاجة لفايربيس) ====================
+const ARABIC_LETTERS = [
+  { letter: "ا", name: "ألف", sound: "alef", model: "https://assets.codepen.io/605876/arabic-alef.glb" },
+  { letter: "ب", name: "باء", sound: "ba", model: "https://assets.codepen.io/605876/arabic-ba.glb" },
+  { letter: "ت", name: "تاء", sound: "ta", model: "https://assets.codepen.io/605876/arabic-ta.glb" },
+  { letter: "ث", name: "ثاء", sound: "tha", model: "https://assets.codepen.io/605876/arabic-tha.glb" },
+  { letter: "ج", name: "جيم", sound: "jeem", model: "https://assets.codepen.io/605876/arabic-jeem.glb" },
+  { letter: "ح", name: "حاء", sound: "ha", model: "https://assets.codepen.io/605876/arabic-ha.glb" },
+  { letter: "خ", name: "خاء", sound: "kha", model: "https://assets.codepen.io/605876/arabic-kha.glb" },
+  { letter: "د", name: "دال", sound: "dal", model: "https://assets.codepen.io/605876/arabic-dal.glb" },
+  { letter: "ذ", name: "ذال", sound: "dhal", model: "https://assets.codepen.io/605876/arabic-dhal.glb" },
+  { letter: "ر", name: "راء", sound: "ra", model: "https://assets.codepen.io/605876/arabic-ra.glb" },
+  { letter: "ز", name: "زاي", sound: "zay", model: "https://assets.codepen.io/605876/arabic-zay.glb" },
+  { letter: "س", name: "سين", sound: "seen", model: "https://assets.codepen.io/605876/arabic-seen.glb" },
+  { letter: "ش", name: "شين", sound: "sheen", model: "https://assets.codepen.io/605876/arabic-sheen.glb" },
+  { letter: "ص", name: "صاد", sound: "sad", model: "https://assets.codepen.io/605876/arabic-sad.glb" },
+  { letter: "ض", name: "ضاد", sound: "dad", model: "https://assets.codepen.io/605876/arabic-dad.glb" },
+  { letter: "ط", name: "طاء", sound: "ta", model: "https://assets.codepen.io/605876/arabic-ta2.glb" },
+  { letter: "ظ", name: "ظاء", sound: "dha", model: "https://assets.codepen.io/605876/arabic-dha.glb" },
+  { letter: "ع", name: "عين", sound: "ain", model: "https://assets.codepen.io/605876/arabic-ain.glb" },
+  { letter: "غ", name: "غين", sound: "ghain", model: "https://assets.codepen.io/605876/arabic-ghain.glb" },
+  { letter: "ف", name: "فاء", sound: "fa", model: "https://assets.codepen.io/605876/arabic-fa.glb" },
+  { letter: "ق", name: "قاف", sound: "qaf", model: "https://assets.codepen.io/605876/arabic-qaf.glb" },
+  { letter: "ك", name: "كاف", sound: "kaf", model: "https://assets.codepen.io/605876/arabic-kaf.glb" },
+  { letter: "ل", name: "لام", sound: "lam", model: "https://assets.codepen.io/605876/arabic-lam.glb" },
+  { letter: "م", name: "ميم", sound: "meem", model: "https://assets.codepen.io/605876/arabic-meem.glb" },
+  { letter: "ن", name: "نون", sound: "noon", model: "https://assets.codepen.io/605876/arabic-noon.glb" },
+  { letter: "ه", name: "هاء", sound: "ha", model: "https://assets.codepen.io/605876/arabic-ha2.glb" },
+  { letter: "و", name: "واو", sound: "waw", model: "https://assets.codepen.io/605876/arabic-waw.glb" },
+  { letter: "ي", name: "ياء", sound: "ya", model: "https://assets.codepen.io/605876/arabic-ya.glb" },
+];
+
+// ==================== حفظ التقدم ====================
+const PROGRESS_KEY = "holoalif_progress_v1";
+function useProgress() {
+  const [learned, setLearned] = useState(() => {
+    const saved = localStorage.getItem(PROGRESS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const markLearned = (letter) => {
+    const newLearned = [...new Set([...learned, letter])];
+    setLearned(newLearned);
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(newLearned));
+  };
+  const resetProgress = () => {
+    setLearned([]);
+    localStorage.removeItem(PROGRESS_KEY);
+  };
+  return { learned, markLearned, resetProgress, totalLearned: learned.length };
+}
+
+// ==================== تفاعل الصوت والماوس ====================
+function useAudioLevel() {
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    let raf, analyser, dataArray;
+    const init = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const ctx = new AudioContext();
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        const loop = () => {
+          analyser.getByteFrequencyData(dataArray);
+          const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length / 255;
+          setLevel(avg);
+          raf = requestAnimationFrame(loop);
+        };
+        loop();
+      } catch (e) { console.warn("Mic access denied"); }
+    };
+    init();
+    return () => { if (raf) cancelAnimationFrame(raf); };
+  }, []);
+  return level;
+}
+
+function useMouseMove() {
+  const mouse = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    const handler = (e) => {
+      mouse.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    };
+    window.addEventListener("mousemove", handler);
+    return () => window.removeEventListener("mousemove", handler);
+  }, []);
+  return mouse;
+}
+
+// ==================== التطبيق الرئيسي ====================
+export default function App() {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [mode, setMode] = useState("learn"); // learn | quiz
+  const [quizOptions, setQuizOptions] = useState([]);
+  const [feedback, setFeedback] = useState("");
+  const audioLevel = useAudioLevel();
+  const mouse = useMouseMove();
+  const { learned, markLearned, resetProgress, totalLearned } = useProgress();
+
+  const currentLetter = ARABIC_LETTERS[currentIdx];
+
+  // تشغيل الصوت
+  const playSound = () => {
+    const audio = new Audio(`https://assets.codepen.io/605876/arabic-${currentLetter.sound}.mp3`);
+    audio.play().catch(() => {});
+    if (!learned.includes(currentLetter.letter)) {
+      markLearned(currentLetter.letter);
+    }
+  };
+
+  // وضع الاختبار
+  useEffect(() => {
+    if (mode === "quiz") {
+      const options = [currentIdx];
+      while (options.length < 4) {
+        const rand = Math.floor(Math.random() * ARABIC_LETTERS.length);
+        if (!options.includes(rand)) options.push(rand);
+      }
+      setQuizOptions(options.sort(() => Math.random() - 0.5));
+      setFeedback("");
+    }
+  }, [currentIdx, mode]);
+
+  const checkAnswer = (idx) => {
+    if (ARABIC_LETTERS[idx].letter === currentLetter.letter) {
+      setFeedback("أحسنت! صحيح");
+      markLearned(currentLetter.letter);
+      setTimeout(() => nextLetter(), 1500);
+    } else {
+      setFeedback("حاول مرة أخرى");
+    }
+  };
+
+  const nextLetter = () => {
+    if (mode === "quiz") {
+      setCurrentIdx(Math.floor(Math.random() * ARABIC_LETTERS.length));
+    } else {
+      setCurrentIdx((i) => (i + 1) % ARABIC_LETTERS.length);
+    }
+  };
+
+  const prevLetter = () => {
+    setCurrentIdx((i) => (i - 1 + ARABIC_LETTERS.length) % ARABIC_LETTERS.length);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-black text-white flex flex-col items-center">
+      {/* العنوان */}
+      <div className="text-center py-6">
+        <h1 className="text-5xl font-bold mb-2">هولوغرام الحروف العربية</h1>
+        <p className="text-xl opacity-90">حرّك الماوس • تكلّم في الميكروفون • اضغط على الحرف لسماعه</p>
+        <div className="mt-4 text-2xl">تم تعلّم {totalLearned} من 28 حرفًا</div>
+      </div>
+
+      {/* المسرح ثلاثي الأبعاد */}
+      <div className="w-full max-w-4xl h-96 bg-black/50 rounded-3xl overflow-hidden shadow-2xl">
+        <Canvas camera={{ position: [0, 1.5, 4], fov: 50 }}>
+          <ambientLight intensity={0.4} />
+          <directionalLight position={[5, 5, 5]} intensity={0.8} />
+          <Suspense fallback={<Text color="white">جاري تحميل الحرف...</Text>}>
+            <LetterModel
+              url={currentLetter.model}
+              mouseRef={mouse}
+              audioLevel={audioLevel}
+              letter={currentLetter.letter}
+            />
+            <Environment preset="night" />
+            <ContactShadows position-y={-1} opacity={0.5} blur={3} />
+          </Suspense>
+          <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 2} />
+        </Canvas>
+      </div>
+
+      {/* معلومات الحرف */}
+      <div className="text-center mt-6 text-6xl font-bold">{currentLetter.letter}</div>
+      <div className="text-3xl mt-2">{currentLetter.name}</div>
+
+      {/* أزرار التحكم */}
+      <div className="flex gap-4 mt-8">
+        <button onClick={prevLetter} className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full text-2xl shadow-lg hover:scale-110 transition">السابق</button>
+        <button onClick={playSound} className="px-12 py-6 bg-yellow-500 rounded-full text-4xl shadow-2xl hover:scale-110 transition">اضغط للنطق</button>
+        <button onClick={nextLetter} className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-2xl shadow-lg hover:scale-110 transition">التالي</button>
+      </div>
+
+      {/* وضع الاختبار */}
+      <div className="mt-10">
+        <button
+          onClick={() => setMode(mode === "learn" ? "quiz" : "learn")}
+          className="px-10 py-4 bg-green-600 rounded-full text-2xl font-bold shadow-xl hover:scale-105 transition"
+        >
+          {mode === "learn" ? "ابدأ الاختبار" : "العودة للتعلم"}
+        </button>
+      </div>
+
+      {mode === "quiz" && (
+        <div className="mt-8 grid grid-cols-2 gap-6">
+          {quizOptions.map((idx) => (
+            <button
+              key={idx}
+              onClick={() => checkAnswer(idx)}
+              className="p-8 bg-white/20 backdrop-blur rounded-3xl text-6xl hover:bg-white/40 transition shadow-xl"
+            >
+              {ARABIC_LETTERS[idx].letter}
+            </button>
+          ))}
+          {feedback && <div className="col-span-2 text-4xl font-bold text-yellow-300">{feedback}</div>}
+        </div>
+      )}
+
+      {/* إعادة تعيين التقدم */}
+      <button onClick={resetProgress} className="mt-12 text-sm opacity-70 hover:opacity-100">
+        إعادة تعيين التقدم
+      </button>
+    </div>
+  );
+}
